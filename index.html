@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-KMGCGNZ3');</script>
+    <!-- End Google Tag Manager -->
     <title>Seminar Sage</title>
     <link href="https://fonts.googleapis.com/css2?family=Mulish&display=swap" rel="stylesheet">
     <style>
@@ -10,9 +17,9 @@
             padding: 0;
         }
         #voiceflow-container {
-            border: none; /* Remove iframe border if desired */
-            width: 100vw;  /* Full viewport width */
-            height: 100vh; /* Full viewport height */
+            border: none;
+            width: 100vw;
+            height: 100vh;
             position: fixed;
             top: 0;
             left: 0;
@@ -25,10 +32,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KMGCGNZ3"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
     <div id="voiceflow-container"></div>
     <script type="text/javascript">
       const urlParams = new URLSearchParams(window.location.search);
       const persistence = urlParams.get('persistence') || 'sessionStorage';
+      const uid = urlParams.get('uid');
+      const role = urlParams.get('role');
+      const yearsInRole = urlParams.get('years_in_role');
+      const orgType = urlParams.get('org_type');
+      const schoolCount = urlParams.get('school_count');
+
       (function(d, t) {
           var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
           v.onload = function() {
@@ -36,18 +53,41 @@
               verify: { projectID: '67e57c8960fe7e4d365d966a' },
               url: 'https://general-runtime.voiceflow.com',
               versionID: 'production',
+              userID: uid || undefined,
+              launch: {
+                event: {
+                  type: 'launch',
+                  payload: {
+                    ...(role && { user_role: role }),
+                    ...(yearsInRole && { user_years_in_role: yearsInRole }),
+                    ...(orgType && { user_org_type: orgType }),
+                    ...(schoolCount && { user_school_count: schoolCount }),
+                  },
+                },
+              },
               voice: {
                 url: "https://runtime-api.voiceflow.com"
-             },
-       	 assistant: {
-             persistence: persistence,
-             stylesheet: "chat-style.css",
-        	 extensions: [FileUploadExtension]
-     	 },
+              },
+              assistant: {
+                persistence: persistence,
+                stylesheet: "chat-style.css",
+                extensions: [FileUploadExtension]
+              },
               render: {
                 mode: 'embedded',
                 target: document.getElementById('voiceflow-container')
               }
+            });
+
+            // Push user properties to GTM dataLayer
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: 'sage_user_identified',
+              user_id: uid || undefined,
+              user_role: role,
+              user_years_in_role: yearsInRole,
+              user_org_type: orgType,
+              user_school_count: schoolCount,
             });
           }
           v.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs"; v.type = "text/javascript"; s.parentNode.insertBefore(v, s);
@@ -58,17 +98,17 @@
           match: ({ trace }) =>
             trace.type === 'ext_csvFileUpload' ||
             trace.payload?.name === 'ext_csvFileUpload',
-    
+
           render: ({ trace, element }) => {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = trace.payload.accepted || '*/*';
             input.multiple = true;
-    
+
             input.onchange = () => {
               const files = Array.from(input.files || []);
               const MAX_SIZE = 3 * 1024 * 1024; // 3 MB
-    
+
               const validFiles = files.filter(file => {
                 if (file.size > MAX_SIZE) {
                   alert(`File "${file.name}" is too large. Max size is 3MB.`);
@@ -76,29 +116,29 @@
                 }
                 return true;
               });
-    
+
               if (validFiles.length === 0) return;
-    
+
               const fileReadPromises = validFiles.map(file => {
                 return new Promise((resolve, reject) => {
                   const reader = new FileReader();
-        
+
                   reader.onload = () => {
                     try {
                       const base64 = reader.result.split(',')[1];
                       let fileData;
-        
+
                       // ----------------------------------------------------
-                      // DOCX → TEXT 
+                      // DOCX → TEXT
                       // ----------------------------------------------------
                       const isDocx =
                         file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
                         file.name.toLowerCase().endsWith(".docx");
-        
+
                       if (file.type.startsWith("text/")) {
                         // CSV, TXT → decode safely
                         fileData = atob(base64);
-        
+
                         resolve({
                           fileName: file.name,
                           fileType: file.type,
@@ -106,13 +146,13 @@
                         });
                         return;
                       }
-        
+
                       if (isDocx) {
                         const arrayBuffer = Uint8Array.from(
                           atob(base64),
                           c => c.charCodeAt(0)
                         ).buffer;
-        
+
                         if (typeof mammoth !== "undefined") {
                           mammoth.extractRawText({ arrayBuffer })
                             .then(result => {
@@ -139,23 +179,23 @@
                         }
                         return;
                       }
-        
+
                       // ----------------------------------------------------
                       // XLS / XLSX → CSV extraction
                       // ----------------------------------------------------
                       const isExcel =
                         file.name.toLowerCase().endsWith(".xlsx") ||
                         file.name.toLowerCase().endsWith(".xls");
-        
+
                       if (isExcel) {
                         try {
                           const binary = atob(base64);
                           const workbook = XLSX.read(binary, { type: "binary" });
                           const sheetName = workbook.SheetNames[0];
                           const sheet = workbook.Sheets[sheetName];
-        
+
                           const csv = XLSX.utils.sheet_to_csv(sheet);
-        
+
                           resolve({
                             fileName: file.name,
                             fileType: "text/plain",
@@ -169,31 +209,31 @@
                             fileData: "[Could not extract text from Excel]"
                           });
                         }
-        
+
                         return; // prevent double resolve
                       }
-        
+
                       // ----------------------------------------------------
                       // Everything else → base64
                       // ----------------------------------------------------
                       fileData = base64;
-        
+
                       resolve({
                         fileName: file.name,
                         fileType: file.type,
                         fileData
                       });
-        
+
                     } catch (err) {
                       reject(err);
                     }
                   };
-        
+
                   reader.onerror = reject;
                   reader.readAsDataURL(file);
                 });
               });
-        
+
               Promise.all(fileReadPromises)
                 .then(filePayloads => {
                   window.voiceflow.chat.interact({
